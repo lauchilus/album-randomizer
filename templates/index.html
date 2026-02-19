@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Album Randomizer</title>
+</head>
+<body>
+    <h1>Mis Álbumes</h1>
+    <button id="randomBtn">Sorpresa Aleatoria!</button>
+    <button id="resetBtn">Reiniciar escuchados</button>
+    <div id="albumDisplay"></div>
+
+    <script>
+        document.getElementById("randomBtn").addEventListener("click", async () => {
+            const res = await fetch("/random", {method: "POST"});
+            const album = await res.json();
+
+            if(album.message){
+                document.getElementById("albumDisplay").innerHTML = `<p>${album.message}</p>`;
+                return;
+            }
+
+            document.getElementById("albumDisplay").innerHTML = `
+                <h2>${album.name}</h2>
+                <p>Artista: ${album.artist}</p>
+                <p>Escuchado: ${album.timesListened} veces</p>
+            `;
+        });
+
+        document.getElementById("resetBtn").addEventListener("click", async () => {
+            const res = await fetch("/reset", {method: "POST"});
+            const data = await res.json();
+            document.getElementById("albumDisplay").innerHTML = `<p>${data.message}</p>`;
+        });
+    </script>
+</body>
+</html>

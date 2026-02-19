@@ -1,0 +1,17 @@
+# Binarios
+*.exe
+*.out
+
+# Dependencias
+/vendor/
+
+# Archivos temporales
+*.log
+*.tmp
+
+# SQLite
+data/albums.db
+
+# Editor / IDE
+.vscode/
+.idea/
