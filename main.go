@@ -7,26 +7,24 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
 type Album struct {
 	ID            int
-	Number        int
+	Rank          int
+	Title         string
+	Band          string
+	Country       string
 	Year          int
-	Name          string
-	Artist        string
-	Genre         string
-	Subgenre      string
 	TimesListened int
 }
 
 var albums []Album
 
-// Carga los álbumes desde el CSV
 func loadAlbumsFromCSV(path string) error {
 	file, err := os.Open(path)
 	if err != nil {
@@ -45,22 +43,33 @@ func loadAlbumsFromCSV(path string) error {
 		if i == 0 { // saltar cabecera
 			continue
 		}
-		number, _ := strconv.Atoi(row[0])
-		year, _ := strconv.Atoi(row[1])
+
+		rank, _ := strconv.Atoi(row[0])
+		year, _ := strconv.Atoi(row[4])
+
+		// Ignorar filas vacías
+		if row[1] == "" || row[2] == "" {
+			continue
+		}
+
 		albums = append(albums, Album{
-			ID:       i,
-			Number:   number,
-			Year:     year,
-			Name:     row[2],
-			Artist:   row[3],
-			Genre:    row[4],
-			Subgenre: row[5],
+			ID:      i,
+			Rank:    rank,
+			Title:   row[1],
+			Band:    row[2],
+			Country: row[3],
+			Year:    year,
 		})
 	}
+
+	// Ordenar por Rank
+	sort.Slice(albums, func(i, j int) bool {
+		return albums[i].Rank < albums[j].Rank
+	})
+
 	return nil
 }
 
-// Devuelve un álbum aleatorio que no haya sido escuchado
 func getRandomUnlistenedAlbum() *Album {
 	var unlistened []*Album
 	for i := range albums {
@@ -76,7 +85,7 @@ func getRandomUnlistenedAlbum() *Album {
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
+	rand.Seed(int64(os.Getpid()))
 
 	r := gin.Default()
 	r.LoadHTMLGlob("templates/*")
@@ -86,15 +95,13 @@ func main() {
 		panic(err)
 	}
 
-	// Página principal
 	r.GET("/", func(c *gin.Context) {
 		albumsJSON, _ := json.Marshal(albums)
 		c.HTML(http.StatusOK, "index.html", gin.H{
-			"albumsJS": template.JS(albumsJSON), // pasa JSON seguro a JS
+			"albumsJS": template.JS(albumsJSON),
 		})
 	})
 
-	// Random album
 	r.POST("/random", func(c *gin.Context) {
 		album := getRandomUnlistenedAlbum()
 		if album == nil {
@@ -104,7 +111,6 @@ func main() {
 		c.JSON(200, album)
 	})
 
-	// Marcar álbum como escuchado
 	r.POST("/mark-listened/:id", func(c *gin.Context) {
 		idParam := c.Param("id")
 		id, err := strconv.Atoi(idParam)
@@ -123,7 +129,6 @@ func main() {
 		c.JSON(404, gin.H{"error": "Álbum no encontrado"})
 	})
 
-	// Reset de escuchados
 	r.POST("/reset", func(c *gin.Context) {
 		for i := range albums {
 			albums[i].TimesListened = 0
@@ -131,5 +136,5 @@ func main() {
 		c.JSON(200, gin.H{"message": "Lista reiniciada"})
 	})
 
-	r.Run(":8080") // ejecuta en localhost:8080
+	r.Run(":8080")
 }
