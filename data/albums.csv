@@ -1,5 +1,4 @@
 "Rank","Title","Band","Country","Year","Compilation","Live","YearRank","DecadeRank","OverallRank","RankScore","AvgRating","NumRatings","AlbumID","Notes","Buy"
-"0","=HYPERLINK(""https://www.besteveralbums.com/overall.php"", ""BestEverAlbums.com - The Greatest Music Albums of All Time"")","","","","","","","","","","","","","",""
 "1","OK Computer","Radiohead","uk","1997","No","No","1","1","1","63067","91.838623047","5657","227","","=HYPERLINK(""https://www.besteveralbums.com/buy.php?o=album&oid=227&src=csv"", ""Own it! - Click to buy from iTunes, Amazon or eBay"")"
 "2","The Dark Side Of The Moon","Pink Floyd","uk","1973","No","No","1","1","2","59352","92.288200378","5341","203","","=HYPERLINK(""https://www.besteveralbums.com/buy.php?o=album&oid=203&src=csv"", ""Own it! - Click to buy from iTunes, Amazon or eBay"")"
 "3","Abbey Road","The Beatles","uk","1969","No","No","1","1","3","56754","91.720932007","4643","24","","=HYPERLINK(""https://www.besteveralbums.com/buy.php?o=album&oid=24&src=csv"", ""Own it! - Click to buy from iTunes, Amazon or eBay"")"
@@ -10000,4 +9999,3 @@
 "9998","Vice Verses","Switchfoot","us","2011","No","No","220","2001","9998","119","71.518959045","41","26798","","=HYPERLINK(""https://www.besteveralbums.com/buy.php?o=album&oid=26798&src=csv"", ""Own it! - Click to buy from iTunes, Amazon or eBay"")"
 "9999","The Village Fugs Sing Ballads Of Contemporary Protest, Point Of Views, And General Dissatisfaction","The Fugs","us","1965","No","No","71","724","9999","119","70.693840027","44","20345","","=HYPERLINK(""https://www.besteveralbums.com/buy.php?o=album&oid=20345&src=csv"", ""Own it! - Click to buy from iTunes, Amazon or eBay"")"
 "10000","The Galilean Satellites","Rosetta","us","2005","No","No","183","1728","10000","119","75.582237244","20","22714","","=HYPERLINK(""https://www.besteveralbums.com/buy.php?o=album&oid=22714&src=csv"", ""Own it! - Click to buy from iTunes, Amazon or eBay"")"
-"100000","=""Source: ""&HYPERLINK(""https://www.besteveralbums.com"",""BestEverAlbums.com"")","","","","","","","","","","","","","",""

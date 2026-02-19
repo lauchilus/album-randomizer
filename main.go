@@ -1,34 +1,65 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/csv"
 	"encoding/json"
 	"html/template"
+	"log"
 	"math/rand"
 	"net/http"
 	"os"
-	"sort"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	_ "modernc.org/sqlite"
 )
 
 type Album struct {
-	ID            int
-	Rank          int
-	Title         string
-	Band          string
-	Country       string
-	Year          int
-	TimesListened int
+	ID            int    `json:"ID"`
+	Rank          int    `json:"Rank"`
+	Title         string `json:"Title"`
+	Band          string `json:"Band"`
+	Country       string `json:"Country"`
+	Year          int    `json:"Year"`
+	TimesListened int    `json:"TimesListened"`
 }
 
-var albums []Album
+var db *sql.DB
 
-func loadAlbumsFromCSV(path string) error {
+func initDB() {
+	// Crear carpeta data si no existe
+	if _, err := os.Stat("data"); os.IsNotExist(err) {
+		os.Mkdir("data", 0755)
+	}
+
+	var err error
+	db, err = sql.Open("sqlite", "./data/albums.db")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Crear tabla si no existe
+	createTable := `
+	CREATE TABLE IF NOT EXISTS albums (
+		id INTEGER PRIMARY KEY,
+		rank INTEGER,
+		title TEXT,
+		band TEXT,
+		country TEXT,
+		year INTEGER,
+		times_listened INTEGER DEFAULT 0
+	);
+	`
+	if _, err := db.Exec(createTable); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func loadCSVIntoDB(path string) {
 	file, err := os.Open(path)
 	if err != nil {
-		return err
+		log.Fatal(err)
 	}
 	defer file.Close()
 
@@ -36,66 +67,89 @@ func loadAlbumsFromCSV(path string) error {
 	reader.FieldsPerRecord = -1
 	rows, err := reader.ReadAll()
 	if err != nil {
-		return err
+		log.Fatal(err)
 	}
+
+	tx, _ := db.Begin()
+	stmt, _ := tx.Prepare(`
+	INSERT OR IGNORE INTO albums (id, rank, title, band, country, year, times_listened)
+	VALUES (?, ?, ?, ?, ?, ?, ?)
+	`)
+	defer stmt.Close()
 
 	for i, row := range rows {
-		if i == 0 { // saltar cabecera
-			continue
+		if i == 0 {
+			continue // saltar cabecera
 		}
-
 		rank, _ := strconv.Atoi(row[0])
 		year, _ := strconv.Atoi(row[4])
-
-		// Ignorar filas vacías
-		if row[1] == "" || row[2] == "" {
-			continue
-		}
-
-		albums = append(albums, Album{
-			ID:      i,
-			Rank:    rank,
-			Title:   row[1],
-			Band:    row[2],
-			Country: row[3],
-			Year:    year,
-		})
+		stmt.Exec(i, rank, row[1], row[2], row[3], year, 0)
 	}
 
-	// Ordenar por Rank
-	sort.Slice(albums, func(i, j int) bool {
-		return albums[i].Rank < albums[j].Rank
-	})
-
-	return nil
+	tx.Commit()
 }
 
-func getRandomUnlistenedAlbum() *Album {
-	var unlistened []*Album
-	for i := range albums {
-		if albums[i].TimesListened == 0 {
-			unlistened = append(unlistened, &albums[i])
+func getAllAlbums() ([]Album, error) {
+	rows, err := db.Query("SELECT id, rank, title, band, country, year, times_listened FROM albums ORDER BY rank ASC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var albums []Album
+	for rows.Next() {
+		var a Album
+		if err := rows.Scan(&a.ID, &a.Rank, &a.Title, &a.Band, &a.Country, &a.Year, &a.TimesListened); err != nil {
+			return nil, err
 		}
+		albums = append(albums, a)
 	}
-	if len(unlistened) == 0 {
-		return nil
+	return albums, nil
+}
+
+func getRandomUnlistenedAlbum() (*Album, error) {
+	row := db.QueryRow("SELECT id, rank, title, band, country, year, times_listened FROM albums WHERE times_listened = 0 ORDER BY RANDOM() LIMIT 1")
+	var a Album
+	err := row.Scan(&a.ID, &a.Rank, &a.Title, &a.Band, &a.Country, &a.Year, &a.TimesListened)
+	if err == sql.ErrNoRows {
+		return nil, nil
 	}
-	idx := rand.Intn(len(unlistened))
-	return unlistened[idx]
+	if err != nil {
+		return nil, err
+	}
+	return &a, nil
+}
+
+func markAlbumListened(id int) (*Album, error) {
+	_, err := db.Exec("UPDATE albums SET times_listened = times_listened + 1 WHERE id = ?", id)
+	if err != nil {
+		return nil, err
+	}
+	row := db.QueryRow("SELECT id, rank, title, band, country, year, times_listened FROM albums WHERE id = ?", id)
+	var a Album
+	if err := row.Scan(&a.ID, &a.Rank, &a.Title, &a.Band, &a.Country, &a.Year, &a.TimesListened); err != nil {
+		return nil, err
+	}
+	return &a, nil
+}
+
+func resetAllAlbums() error {
+	_, err := db.Exec("UPDATE albums SET times_listened = 0")
+	return err
 }
 
 func main() {
 	rand.Seed(int64(os.Getpid()))
 
+	initDB()
+	loadCSVIntoDB("data/albums.csv") // Carga inicial, si no existen registros
+
 	r := gin.Default()
 	r.LoadHTMLGlob("templates/*")
 	r.Static("/static", "./static")
 
-	if err := loadAlbumsFromCSV("data/albums.csv"); err != nil {
-		panic(err)
-	}
-
 	r.GET("/", func(c *gin.Context) {
+		albums, _ := getAllAlbums()
 		albumsJSON, _ := json.Marshal(albums)
 		c.HTML(http.StatusOK, "index.html", gin.H{
 			"albumsJS": template.JS(albumsJSON),
@@ -103,7 +157,7 @@ func main() {
 	})
 
 	r.POST("/random", func(c *gin.Context) {
-		album := getRandomUnlistenedAlbum()
+		album, _ := getRandomUnlistenedAlbum()
 		if album == nil {
 			c.JSON(200, gin.H{"message": "Todos los álbumes ya se escucharon"})
 			return
@@ -118,20 +172,18 @@ func main() {
 			c.JSON(400, gin.H{"error": "ID inválido"})
 			return
 		}
-
-		for i := range albums {
-			if albums[i].ID == id {
-				albums[i].TimesListened++
-				c.JSON(200, albums[i])
-				return
-			}
+		album, err := markAlbumListened(id)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
 		}
-		c.JSON(404, gin.H{"error": "Álbum no encontrado"})
+		c.JSON(200, album)
 	})
 
 	r.POST("/reset", func(c *gin.Context) {
-		for i := range albums {
-			albums[i].TimesListened = 0
+		if err := resetAllAlbums(); err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
 		}
 		c.JSON(200, gin.H{"message": "Lista reiniciada"})
 	})
