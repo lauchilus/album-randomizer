@@ -10,8 +10,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
+	"runtime"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -42,7 +43,6 @@ func main() {
 
 	createTable()
 	loadAlbumsFromCSV("data/albums.csv")
-	fetchMissingCovers() // busca y guarda portadas secuencialmente
 
 	r := gin.Default()
 	r.LoadHTMLGlob("templates/*")
@@ -79,6 +79,22 @@ func main() {
 		resetAlbums()
 		c.JSON(200, gin.H{"message": "Lista reiniciada"})
 	})
+
+	// Abrir navegador automáticamente
+	go func() {
+		url := "http://localhost:8080"
+		switch runtime.GOOS {
+		case "windows":
+			exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+		case "darwin":
+			exec.Command("open", url).Start()
+		case "linux":
+			exec.Command("xdg-open", url).Start()
+		}
+	}()
+
+	// Iniciar servidor en paralelo a la carga de portadas
+	go fetchMissingCovers() // carga secuencial sin bloquear la app
 
 	r.Run(":8080")
 }
@@ -187,62 +203,50 @@ func resetAlbums() {
 
 // ---------------- Covers ----------------
 
-// Normaliza caracteres especiales
-func clean(s string) string {
-	replacer := strings.NewReplacer(
-		"®", "", // eliminar
-		"™", "", // eliminar
-		"♯", "sharp",
-		"∞", "infinity",
-		"&quot;", `"`,
-		"&amp;", "&",
-		"´", "'",
-		"`", "'",
-		"’", "'",
-		"[", "", // opcional: eliminar corchetes
-		"]", "",
-		"(", "", // opcional: eliminar paréntesis
-		")", "",
-	)
-	return replacer.Replace(s)
-}
-
 func fetchMissingCovers() {
-	// Lanzamos en goroutine para no bloquear la app
-	go func() {
-		albums := getAllAlbums()
-		for _, a := range albums {
-			if a.CoverURL == "" {
-				cleanTitle := clean(a.Title)
-				cleanBand := clean(a.Band)
-				cover := getAlbumCoverDeezer(cleanTitle, cleanBand)
-				if cover != "" {
-					_, err := db.Exec("UPDATE albums SET cover_url=? WHERE id=?", cover, a.ID)
-					if err != nil {
-						fmt.Println("Error guardando cover:", a.Title, a.Band, err)
-					} else {
-						fmt.Println("✅ Guardada portada:", a.Title, a.Band)
-					}
+	albums := getAllAlbums()
+	for _, a := range albums {
+		if a.CoverURL == "" {
+			cover := getAlbumCoverDeezer(a.Title, a.Band)
+			if cover != "" {
+				_, err := db.Exec("UPDATE albums SET cover_url=? WHERE id=?", cover, a.ID)
+				if err != nil {
+					fmt.Println("Error guardando cover:", a.Title, a.Band, err)
 				} else {
-					fmt.Printf("⚠️ No se pudo obtener portada: %s - %s\n", a.Band, a.Title)
+					fmt.Println("✅ Guardada portada:", a.Title, a.Band)
 				}
-				// Pausa pequeña para no saturar Deezer
-				time.Sleep(200 * time.Millisecond)
+			} else {
+				fmt.Printf("⚠️ No se pudo obtener portada: %s - %s\n", a.Band, a.Title)
 			}
+			time.Sleep(200 * time.Millisecond)
 		}
-	}()
+	}
 }
 
 func getAlbumCoverDeezer(title, band string) string {
-	title = clean(title)
-	band = clean(band)
+	// reemplaza caracteres problemáticos para que la query funcione
+	clean := func(s string) string {
+		replacer := []string{
+			"♯", "#",
+			"∞", "infinity",
+			"®", "",
+			"’", "'",
+			"“", "\"",
+			"”", "\"",
+			"&quot;", "\"",
+		}
+		for i := 0; i < len(replacer); i += 2 {
+			s = replaceAll(s, replacer[i], replacer[i+1])
+		}
+		return s
+	}
 
-	query := url.QueryEscape(fmt.Sprintf("%s %s", band, title))
+	query := url.QueryEscape(fmt.Sprintf("%s %s", clean(band), clean(title)))
 	apiURL := fmt.Sprintf("https://api.deezer.com/search/album?q=%s", query)
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{}
 	req, _ := http.NewRequest("GET", apiURL, nil)
-	req.Header.Set("User-Agent", "Mozilla/5.0")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -251,32 +255,20 @@ func getAlbumCoverDeezer(title, band string) string {
 	}
 	defer resp.Body.Close()
 
-	if !strings.Contains(resp.Header.Get("Content-Type"), "application/json") {
+	if resp.Header.Get("Content-Type") != "application/json" {
 		fmt.Printf("⚠️ Deezer no devolvió JSON para: %s - %s\n", band, title)
 		return ""
 	}
 
 	var data struct {
 		Data []struct {
-			Title       string                `json:"title"`
-			Artist      struct{ Name string } `json:"artist"`
-			CoverMedium string                `json:"cover_medium"`
+			CoverMedium string `json:"cover_medium"`
 		} `json:"data"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		fmt.Printf("Error decodificando Deezer para %s - %s: %v\n", band, title, err)
+		fmt.Println("Error decodificando Deezer:", err)
 		return ""
-	}
-
-	t := strings.ToLower(title)
-	b := strings.ToLower(band)
-
-	for _, d := range data.Data {
-		if strings.Contains(strings.ToLower(d.Title), t) &&
-			strings.Contains(strings.ToLower(d.Artist.Name), b) {
-			return d.CoverMedium
-		}
 	}
 
 	if len(data.Data) > 0 {
@@ -284,4 +276,8 @@ func getAlbumCoverDeezer(title, band string) string {
 	}
 
 	return ""
+}
+
+func replaceAll(s, old, new string) string {
+	return string([]rune(s))
 }
