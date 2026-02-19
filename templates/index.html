@@ -1,183 +1,105 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
-<meta charset="UTF-8">
-<title>Album Randomizer</title>
-<style>
-/* --- Variables de color --- */
-:root {
-    --bg-light: #f5f5f5;
-    --bg-dark: #1c1c2e;
-    --text-light: #fff;
-    --text-dark: #333;
-    --primary: #5c6bc0; /* violeta-azulado */
-    --secondary: #7986cb;
-    --accent: #448aff; /* azul brillante */
-    --hover: #3949ab;
-    --reset-color: #ff7043;
-    --mark-color: #7c4dff;
-}
-
-/* --- Reset básico --- */
-* { box-sizing: border-box; margin: 0; padding: 0; }
-
-body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    padding: 30px;
-    background-color: var(--bg-light);
-    color: var(--text-dark);
-    transition: all 0.3s ease;
-}
-
-/* --- Modo oscuro --- */
-body.dark {
-    background-color: var(--bg-dark);
-    color: var(--text-light);
-}
-
-h1 {
-    color: var(--primary);
-    margin-bottom: 20px;
-}
-
-/* --- Botones --- */
-button {
-    padding: 8px 14px;
-    margin-right: 5px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-weight: bold;
-    transition: all 0.2s ease;
-}
-
-button:hover { opacity: 0.9; }
-
-#randomBtn { background-color: var(--accent); color: #fff; }
-#resetBtn { background-color: var(--reset-color); color: #fff; }
-#toggleDark { background-color: var(--secondary); color: #fff; }
-#markRandomBtn { background-color: var(--mark-color); color: #fff; margin-top: 10px; }
-.markBtn { background-color: var(--secondary); color: #fff; border-radius: 4px; }
-
-/* --- Input búsqueda --- */
-#searchInput {
-    padding: 8px;
-    width: 300px;
-    border-radius: 6px;
-    border: 1px solid #ccc;
-    margin-bottom: 15px;
-    transition: all 0.3s ease;
-}
-
-body.dark #searchInput {
-    background-color: #2c2c3d;
-    border-color: #555;
-    color: #eee;
-}
-
-/* --- Tabla --- */
-table {
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 0 10px rgba(0,0,0,0.05);
-    background-color: #fff;
-    transition: all 0.3s ease;
-}
-
-body.dark table { background-color: #2c2c3d; }
-
-th, td {
-    padding: 10px 12px;
-    text-align: left;
-}
-
-th {
-    background-color: var(--primary);
-    color: #fff;
-    font-weight: 600;
-}
-
-tbody tr:nth-child(even) { background-color: #f9f9f9; }
-tbody tr:hover { background-color: #e3f2fd; }
-
-body.dark tbody tr:nth-child(even) { background-color: #28283a; }
-body.dark tbody tr:hover { background-color: #3a3a5c; }
-
-/* --- Display de álbum random --- */
-#albumDisplay {
-    margin-bottom: 30px;
-    padding: 15px 20px;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-    background-color: #fff;
-    transition: all 0.3s ease;
-}
-
-body.dark #albumDisplay { background-color: #2c2c3d; }
-
-#albumDisplay h2 { color: var(--primary); margin-bottom: 5px; }
-#albumDisplay p { margin: 4px 0; }
-
-/* --- Paginación --- */
-.pagination {
-    margin-top: 15px;
-}
-
-.pagination button {
-    padding: 6px 10px;
-    margin-right: 5px;
-    border-radius: 6px;
-    border: 1px solid #ccc;
-    background-color: #fff;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.pagination button:hover { background-color: #f0f0f0; }
-.pagination button:disabled {
-    background-color: var(--accent);
-    color: #fff;
-    cursor: default;
-    border: none;
-}
-
-body.dark .pagination button { background-color: #3a3a5c; border-color: #555; }
-body.dark .pagination button:hover { background-color: #50507a; }
-body.dark .pagination button:disabled { background-color: var(--accent); color: #fff; }
-
-</style>
+    <meta charset="UTF-8">
+    <title>Album Randomizer</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background-color: #1e1e2f;
+            color: #e0e0f0;
+        }
+        table { 
+            border-collapse: collapse; 
+            width: 100%; 
+            margin-top: 10px; 
+            background-color: #2a2a40;
+        }
+        th, td { 
+            border: 1px solid #444; 
+            padding: 5px; 
+            text-align: left; 
+            vertical-align: middle;
+        }
+        th { 
+            background-color: #3b3b5a; 
+        }
+        input { 
+            padding: 5px; 
+            margin-bottom: 10px; 
+            width: 300px; 
+            background-color: #2a2a40;
+            border: 1px solid #555;
+            color: #e0e0f0;
+        }
+        button { 
+            margin-right: 5px; 
+            padding: 5px 10px; 
+            background-color: #4a4abf;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:disabled { 
+            background-color: #888; 
+            cursor: default;
+        }
+        #albumDisplay { 
+            margin-bottom: 20px; 
+        }
+        #albumDisplay img {
+            max-width: 250px;
+            margin-top: 10px;
+            border-radius: 6px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        table img {
+            max-width: 50px;
+            border-radius: 4px;
+        }
+        .pagination { 
+            margin-top: 10px; 
+        }
+        .pagination button { 
+            padding: 5px 8px; 
+            margin-right: 3px; 
+            background-color: #6a6ae0;
+            border-radius: 3px;
+        }
+    </style>
 </head>
 <body>
-<h1>Mis Álbumes</h1>
+    <h1>Mis Álbumes</h1>
 
-<button id="randomBtn">🎲 Sorpresa Aleatoria!</button>
-<button id="resetBtn">🔄 Reiniciar escuchados</button>
-<button id="toggleDark">🌙 Modo Oscuro</button>
+    <button id="randomBtn">Sorpresa Aleatoria!</button>
+    <button id="resetBtn">Reiniciar escuchados</button>
 
-<div id="albumDisplay"></div>
+    <br><br>
 
-<h2>Listado completo</h2>
-<input type="text" id="searchInput" placeholder="Buscar por título, artista, país o año">
+    <div id="albumDisplay"></div>
 
-<table id="albumTable">
-    <thead>
-        <tr>
-            <th>Rank</th>
-            <th>Title</th>
-            <th>Band</th>
-            <th>Country</th>
-            <th>Year</th>
-            <th>Escuchado</th>
-            <th>Acción</th>
-        </tr>
-    </thead>
-    <tbody></tbody>
-</table>
+    <h2>Listado completo</h2>
+    <input type="text" id="searchInput" placeholder="Buscar por título, artista, país o año">
 
-<div class="pagination" id="pagination"></div>
+    <table id="albumTable">
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Portada</th>
+                <th>Title</th>
+                <th>Band</th>
+                <th>Country</th>
+                <th>Year</th>
+                <th>Escuchado</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <div class="pagination" id="pagination"></div>
 
 <script>
 (() => {
@@ -186,11 +108,6 @@ body.dark .pagination button:disabled { background-color: var(--accent); color: 
     const perPage = 500;
     let currentPage = 1;
     let filteredAlbums = albums.slice();
-
-    const body = document.body;
-    document.getElementById("toggleDark").addEventListener("click", () => {
-        body.classList.toggle("dark");
-    });
 
     function renderTable(page = 1) {
         const tbody = document.querySelector("#albumTable tbody");
@@ -204,6 +121,7 @@ body.dark .pagination button:disabled { background-color: var(--accent); color: 
             const tr = document.createElement("tr");
             tr.innerHTML = `
                 <td>${a.Rank}</td>
+                <td>${a.CoverURL ? `<img src="${a.CoverURL}" alt="Portada">` : ""}</td>
                 <td>${a.Title}</td>
                 <td>${a.Band}</td>
                 <td>${a.Country}</td>
@@ -220,7 +138,6 @@ body.dark .pagination button:disabled { background-color: var(--accent); color: 
                 const res = await fetch(`/mark-listened/${id}`, { method: "POST" });
                 const updated = await res.json();
                 albums = albums.map(a => a.ID == updated.ID ? updated : a);
-
                 const q = document.getElementById("searchInput").value.toLowerCase().trim();
                 filteredAlbums = albums.filter(a =>
                     a.Title.toLowerCase().includes(q) ||
@@ -228,7 +145,6 @@ body.dark .pagination button:disabled { background-color: var(--accent); color: 
                     a.Country.toLowerCase().includes(q) ||
                     a.Year.toString().includes(q)
                 );
-
                 renderTable(currentPage);
             });
         });
@@ -250,21 +166,26 @@ body.dark .pagination button:disabled { background-color: var(--accent); color: 
         }
     }
 
+    // Random album
     document.getElementById("randomBtn").addEventListener("click", async () => {
         const res = await fetch("/random", {method: "POST"});
         const album = await res.json();
+
         if(album.message){
             document.getElementById("albumDisplay").innerHTML = `<p>${album.message}</p>`;
             currentAlbum = null;
             return;
         }
+
         currentAlbum = album;
+
         document.getElementById("albumDisplay").innerHTML = `
             <h2>${album.Title} (${album.Year})</h2>
             <p>Artista: ${album.Band}</p>
             <p>País: ${album.Country}</p>
             <p>Escuchado: ${album.TimesListened}</p>
-            <button id="markRandomBtn">Marcar como escuchado</button>
+            ${album.CoverURL ? `<img src="${album.CoverURL}" alt="Portada">` : ""}
+            <br><button id="markRandomBtn">Marcar como escuchado</button>
         `;
 
         document.getElementById("markRandomBtn").addEventListener("click", async () => {
@@ -278,6 +199,7 @@ body.dark .pagination button:disabled { background-color: var(--accent); color: 
                 <p>Artista: ${updated.Band}</p>
                 <p>País: ${updated.Country}</p>
                 <p>Escuchado: ${updated.TimesListened} ✅</p>
+                ${updated.CoverURL ? `<img src="${updated.CoverURL}" alt="Portada">` : ""}
             `;
 
             albums = albums.map(a => a.ID === updated.ID ? updated : a);
@@ -292,6 +214,7 @@ body.dark .pagination button:disabled { background-color: var(--accent); color: 
         });
     });
 
+    // Reset escuchados
     document.getElementById("resetBtn").addEventListener("click", async () => {
         const res = await fetch("/reset", {method: "POST"});
         const data = await res.json();
@@ -309,6 +232,7 @@ body.dark .pagination button:disabled { background-color: var(--accent); color: 
         renderTable(currentPage);
     });
 
+    // Búsqueda dinámica
     document.getElementById("searchInput").addEventListener("input", () => {
         const q = document.getElementById("searchInput").value.toLowerCase().trim();
         filteredAlbums = albums.filter(a =>

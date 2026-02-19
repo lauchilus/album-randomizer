@@ -4,152 +4,52 @@ import (
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"html/template"
-	"log"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // driver sqlite puro Go
 )
 
 type Album struct {
-	ID            int    `json:"ID"`
-	Rank          int    `json:"Rank"`
-	Title         string `json:"Title"`
-	Band          string `json:"Band"`
-	Country       string `json:"Country"`
-	Year          int    `json:"Year"`
-	TimesListened int    `json:"TimesListened"`
+	ID            int
+	Rank          int
+	Title         string
+	Band          string
+	Country       string
+	Year          int
+	TimesListened int
+	CoverURL      string
 }
 
 var db *sql.DB
 
-func initDB() {
-	// Crear carpeta data si no existe
-	if _, err := os.Stat("data"); os.IsNotExist(err) {
-		os.Mkdir("data", 0755)
-	}
+func main() {
+	rand.Seed(time.Now().UnixNano())
 
 	var err error
-	db, err = sql.Open("sqlite", "./data/albums.db")
+	db, err = sql.Open("sqlite", "./albums.db")
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
-	// Crear tabla si no existe
-	createTable := `
-	CREATE TABLE IF NOT EXISTS albums (
-		id INTEGER PRIMARY KEY,
-		rank INTEGER,
-		title TEXT,
-		band TEXT,
-		country TEXT,
-		year INTEGER,
-		times_listened INTEGER DEFAULT 0
-	);
-	`
-	if _, err := db.Exec(createTable); err != nil {
-		log.Fatal(err)
-	}
-}
-
-func loadCSVIntoDB(path string) {
-	file, err := os.Open(path)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
-
-	reader := csv.NewReader(file)
-	reader.FieldsPerRecord = -1
-	rows, err := reader.ReadAll()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	tx, _ := db.Begin()
-	stmt, _ := tx.Prepare(`
-	INSERT OR IGNORE INTO albums (id, rank, title, band, country, year, times_listened)
-	VALUES (?, ?, ?, ?, ?, ?, ?)
-	`)
-	defer stmt.Close()
-
-	for i, row := range rows {
-		if i == 0 {
-			continue // saltar cabecera
-		}
-		rank, _ := strconv.Atoi(row[0])
-		year, _ := strconv.Atoi(row[4])
-		stmt.Exec(i, rank, row[1], row[2], row[3], year, 0)
-	}
-
-	tx.Commit()
-}
-
-func getAllAlbums() ([]Album, error) {
-	rows, err := db.Query("SELECT id, rank, title, band, country, year, times_listened FROM albums ORDER BY rank ASC")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var albums []Album
-	for rows.Next() {
-		var a Album
-		if err := rows.Scan(&a.ID, &a.Rank, &a.Title, &a.Band, &a.Country, &a.Year, &a.TimesListened); err != nil {
-			return nil, err
-		}
-		albums = append(albums, a)
-	}
-	return albums, nil
-}
-
-func getRandomUnlistenedAlbum() (*Album, error) {
-	row := db.QueryRow("SELECT id, rank, title, band, country, year, times_listened FROM albums WHERE times_listened = 0 ORDER BY RANDOM() LIMIT 1")
-	var a Album
-	err := row.Scan(&a.ID, &a.Rank, &a.Title, &a.Band, &a.Country, &a.Year, &a.TimesListened)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &a, nil
-}
-
-func markAlbumListened(id int) (*Album, error) {
-	_, err := db.Exec("UPDATE albums SET times_listened = times_listened + 1 WHERE id = ?", id)
-	if err != nil {
-		return nil, err
-	}
-	row := db.QueryRow("SELECT id, rank, title, band, country, year, times_listened FROM albums WHERE id = ?", id)
-	var a Album
-	if err := row.Scan(&a.ID, &a.Rank, &a.Title, &a.Band, &a.Country, &a.Year, &a.TimesListened); err != nil {
-		return nil, err
-	}
-	return &a, nil
-}
-
-func resetAllAlbums() error {
-	_, err := db.Exec("UPDATE albums SET times_listened = 0")
-	return err
-}
-
-func main() {
-	rand.Seed(int64(os.Getpid()))
-
-	initDB()
-	loadCSVIntoDB("data/albums.csv") // Carga inicial, si no existen registros
+	createTable()
+	loadAlbumsFromCSV("data/albums.csv")
+	fetchMissingCovers() // busca y guarda portadas secuencialmente
 
 	r := gin.Default()
 	r.LoadHTMLGlob("templates/*")
 	r.Static("/static", "./static")
 
 	r.GET("/", func(c *gin.Context) {
-		albums, _ := getAllAlbums()
+		albums := getAllAlbums()
 		albumsJSON, _ := json.Marshal(albums)
 		c.HTML(http.StatusOK, "index.html", gin.H{
 			"albumsJS": template.JS(albumsJSON),
@@ -157,7 +57,7 @@ func main() {
 	})
 
 	r.POST("/random", func(c *gin.Context) {
-		album, _ := getRandomUnlistenedAlbum()
+		album := getRandomUnlistenedAlbum()
 		if album == nil {
 			c.JSON(200, gin.H{"message": "Todos los álbumes ya se escucharon"})
 			return
@@ -166,27 +66,222 @@ func main() {
 	})
 
 	r.POST("/mark-listened/:id", func(c *gin.Context) {
-		idParam := c.Param("id")
-		id, err := strconv.Atoi(idParam)
-		if err != nil {
-			c.JSON(400, gin.H{"error": "ID inválido"})
-			return
-		}
-		album, err := markAlbumListened(id)
-		if err != nil {
-			c.JSON(500, gin.H{"error": err.Error()})
+		id, _ := strconv.Atoi(c.Param("id"))
+		album := markListened(id)
+		if album == nil {
+			c.JSON(404, gin.H{"error": "Álbum no encontrado"})
 			return
 		}
 		c.JSON(200, album)
 	})
 
 	r.POST("/reset", func(c *gin.Context) {
-		if err := resetAllAlbums(); err != nil {
-			c.JSON(500, gin.H{"error": err.Error()})
-			return
-		}
+		resetAlbums()
 		c.JSON(200, gin.H{"message": "Lista reiniciada"})
 	})
 
 	r.Run(":8080")
+}
+
+// ---------------- DB ----------------
+
+func createTable() {
+	_, err := db.Exec(`
+	CREATE TABLE IF NOT EXISTS albums (
+		id INTEGER PRIMARY KEY,
+		rank INTEGER,
+		title TEXT,
+		band TEXT,
+		country TEXT,
+		year INTEGER,
+		times_listened INTEGER,
+		cover_url TEXT
+	)`)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func loadAlbumsFromCSV(path string) {
+	file, err := os.Open(path)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	reader.FieldsPerRecord = -1
+	rows, err := reader.ReadAll()
+	if err != nil {
+		panic(err)
+	}
+
+	tx, _ := db.Begin()
+	defer tx.Commit()
+
+	for i, row := range rows {
+		if i == 0 { // saltar cabecera
+			continue
+		}
+		rank, _ := strconv.Atoi(row[0])
+		year, _ := strconv.Atoi(row[4])
+		if row[1] == "" || row[2] == "" {
+			continue
+		}
+
+		_, err := tx.Exec(`
+			INSERT OR IGNORE INTO albums (id, rank, title, band, country, year, times_listened, cover_url)
+			VALUES (?, ?, ?, ?, ?, ?, 0, '')`,
+			i, rank, row[1], row[2], row[3], year)
+		if err != nil {
+			fmt.Println("Error insertando:", row[1], row[2], err)
+		}
+	}
+}
+
+func getAllAlbums() []Album {
+	rows, _ := db.Query("SELECT id, rank, title, band, country, year, times_listened, cover_url FROM albums ORDER BY rank")
+	defer rows.Close()
+	albums := []Album{}
+	for rows.Next() {
+		var a Album
+		rows.Scan(&a.ID, &a.Rank, &a.Title, &a.Band, &a.Country, &a.Year, &a.TimesListened, &a.CoverURL)
+		albums = append(albums, a)
+	}
+	return albums
+}
+
+func getRandomUnlistenedAlbum() *Album {
+	albums := getAllAlbums()
+	unlistened := []*Album{}
+	for i := range albums {
+		if albums[i].TimesListened == 0 {
+			unlistened = append(unlistened, &albums[i])
+		}
+	}
+	if len(unlistened) == 0 {
+		return nil
+	}
+	idx := rand.Intn(len(unlistened))
+	return unlistened[idx]
+}
+
+func markListened(id int) *Album {
+	_, err := db.Exec("UPDATE albums SET times_listened = times_listened + 1 WHERE id = ?", id)
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+	row := db.QueryRow("SELECT id, rank, title, band, country, year, times_listened, cover_url FROM albums WHERE id = ?", id)
+	var a Album
+	row.Scan(&a.ID, &a.Rank, &a.Title, &a.Band, &a.Country, &a.Year, &a.TimesListened, &a.CoverURL)
+	return &a
+}
+
+func resetAlbums() {
+	_, err := db.Exec("UPDATE albums SET times_listened = 0")
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+// ---------------- Covers ----------------
+
+// Normaliza caracteres especiales
+func clean(s string) string {
+	replacer := strings.NewReplacer(
+		"®", "", // eliminar
+		"™", "", // eliminar
+		"♯", "sharp",
+		"∞", "infinity",
+		"&quot;", `"`,
+		"&amp;", "&",
+		"´", "'",
+		"`", "'",
+		"’", "'",
+		"[", "", // opcional: eliminar corchetes
+		"]", "",
+		"(", "", // opcional: eliminar paréntesis
+		")", "",
+	)
+	return replacer.Replace(s)
+}
+
+func fetchMissingCovers() {
+	// Lanzamos en goroutine para no bloquear la app
+	go func() {
+		albums := getAllAlbums()
+		for _, a := range albums {
+			if a.CoverURL == "" {
+				cleanTitle := clean(a.Title)
+				cleanBand := clean(a.Band)
+				cover := getAlbumCoverDeezer(cleanTitle, cleanBand)
+				if cover != "" {
+					_, err := db.Exec("UPDATE albums SET cover_url=? WHERE id=?", cover, a.ID)
+					if err != nil {
+						fmt.Println("Error guardando cover:", a.Title, a.Band, err)
+					} else {
+						fmt.Println("✅ Guardada portada:", a.Title, a.Band)
+					}
+				} else {
+					fmt.Printf("⚠️ No se pudo obtener portada: %s - %s\n", a.Band, a.Title)
+				}
+				// Pausa pequeña para no saturar Deezer
+				time.Sleep(200 * time.Millisecond)
+			}
+		}
+	}()
+}
+
+func getAlbumCoverDeezer(title, band string) string {
+	title = clean(title)
+	band = clean(band)
+
+	query := url.QueryEscape(fmt.Sprintf("%s %s", band, title))
+	apiURL := fmt.Sprintf("https://api.deezer.com/search/album?q=%s", query)
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	req, _ := http.NewRequest("GET", apiURL, nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Error Deezer:", err)
+		return ""
+	}
+	defer resp.Body.Close()
+
+	if !strings.Contains(resp.Header.Get("Content-Type"), "application/json") {
+		fmt.Printf("⚠️ Deezer no devolvió JSON para: %s - %s\n", band, title)
+		return ""
+	}
+
+	var data struct {
+		Data []struct {
+			Title       string                `json:"title"`
+			Artist      struct{ Name string } `json:"artist"`
+			CoverMedium string                `json:"cover_medium"`
+		} `json:"data"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		fmt.Printf("Error decodificando Deezer para %s - %s: %v\n", band, title, err)
+		return ""
+	}
+
+	t := strings.ToLower(title)
+	b := strings.ToLower(band)
+
+	for _, d := range data.Data {
+		if strings.Contains(strings.ToLower(d.Title), t) &&
+			strings.Contains(strings.ToLower(d.Artist.Name), b) {
+			return d.CoverMedium
+		}
+	}
+
+	if len(data.Data) > 0 {
+		return data.Data[0].CoverMedium
+	}
+
+	return ""
 }
