@@ -1,36 +1,159 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <title>Album Randomizer</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+        th, td { border: 1px solid black; padding: 5px; text-align: left; }
+        th { background-color: #eee; }
+        input { padding: 5px; margin-bottom: 10px; width: 300px; }
+        button { margin-right: 5px; padding: 5px 10px; }
+    </style>
 </head>
 <body>
     <h1>Mis Álbumes</h1>
-    <button id="randomBtn">Sorpresa Aleatoria!</button>
+
+    <button id="randomBtn">Que escuchas hoy!</button>
     <button id="resetBtn">Reiniciar escuchados</button>
-    <div id="albumDisplay"></div>
 
-    <script>
-        document.getElementById("randomBtn").addEventListener("click", async () => {
-            const res = await fetch("/random", {method: "POST"});
-            const album = await res.json();
+    <br><br>
 
-            if(album.message){
-                document.getElementById("albumDisplay").innerHTML = `<p>${album.message}</p>`;
-                return;
-            }
+    <div id="albumDisplay" style="margin-top:20px;"></div>
+    <h2>Listado completo</h2>
+    <input type="text" id="searchInput" placeholder="Buscar por nombre, artista, género o año">
+<table id="albumTable">
+    <thead>
+        <tr>
+            <th>Nombre</th>
+            <th>Año</th>
+            <th>Artista</th>
+            <th>Género</th>
+            <th>Subgénero</th>
+            <th>Escuchado</th>
+            <th>Acción</th> <!-- nueva columna -->
+        </tr>
+    </thead>
+    <tbody>
+        <!-- se renderiza desde JS -->
+    </tbody>
+</table>
+
+<script>
+(() => {
+    let albums = JSON.parse('{{.albumsJS}}');
+    let currentAlbum = null;
+
+    function renderTable(filtered) {
+    const tbody = document.querySelector("#albumTable tbody");
+    tbody.innerHTML = "";
+    filtered.forEach(a => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${a.Name}</td>
+            <td>${a.Year}</td>
+            <td>${a.Artist}</td>
+            <td>${a.Genre}</td>
+            <td>${a.Subgenre}</td>
+            <td>${a.TimesListened}</td>
+            <td><button class="markBtn" data-id="${a.ID}">Marcar escuchado</button></td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    // Agregamos eventos a los botones
+    tbody.querySelectorAll(".markBtn").forEach(btn => {
+        btn.addEventListener("click", async () => {
+            const id = btn.getAttribute("data-id");
+            const res = await fetch(`/mark-listened/${id}`, { method: "POST" });
+            const updated = await res.json();
+
+            // Actualizamos el array global
+            albums = albums.map(a => a.ID == updated.ID ? updated : a);
+
+            // Re-renderizamos usando el mismo filtered
+            const searchQuery = document.getElementById("searchInput").value.toLowerCase().trim();
+            const newFiltered = albums.filter(a =>
+                a.Name.toLowerCase().includes(searchQuery) ||
+                a.Artist.toLowerCase().includes(searchQuery) ||
+                a.Genre.toLowerCase().includes(searchQuery) ||
+                a.Year.toString().includes(searchQuery)
+            );
+            renderTable(newFiltered);
+        });
+    });
+}
+
+
+    // Random album
+    document.getElementById("randomBtn").addEventListener("click", async () => {
+        const res = await fetch("/random", {method: "POST"});
+        const album = await res.json();
+
+        if(album.message){
+            document.getElementById("albumDisplay").innerHTML = `<p>${album.message}</p>`;
+            currentAlbum = null;
+            return;
+        }
+
+        currentAlbum = album;
+
+        document.getElementById("albumDisplay").innerHTML = `
+            <h2>${album.Name} (${album.Year})</h2>
+            <p>Artista: ${album.Artist}</p>
+            <p>Género: ${album.Genre}</p>
+            <p>Subgénero: ${album.Subgenre}</p>
+            <p>Escuchado: ${album.TimesListened}</p>
+            <button id="markRandomBtn">Marcar como escuchado</button>
+        `;
+
+        document.getElementById("markRandomBtn").addEventListener("click", async () => {
+            if(!currentAlbum) return;
+            const res = await fetch(`/mark-listened/${currentAlbum.ID}`, {method: "POST"});
+            const updated = await res.json();
+            currentAlbum = updated;
 
             document.getElementById("albumDisplay").innerHTML = `
-                <h2>${album.name}</h2>
-                <p>Artista: ${album.artist}</p>
-                <p>Escuchado: ${album.timesListened} veces</p>
+                <h2>${updated.Name} (${updated.Year})</h2>
+                <p>Artista: ${updated.Artist}</p>
+                <p>Género: ${updated.Genre}</p>
+                <p>Subgénero: ${updated.Subgenre}</p>
+                <p>Escuchado: ${updated.TimesListened} ✅</p>
             `;
-        });
 
-        document.getElementById("resetBtn").addEventListener("click", async () => {
-            const res = await fetch("/reset", {method: "POST"});
-            const data = await res.json();
-            document.getElementById("albumDisplay").innerHTML = `<p>${data.message}</p>`;
+            // Actualizamos el array global y la tabla
+            albums = albums.map(a => a.ID === updated.ID ? updated : a);
+            renderTable(albums);
         });
-    </script>
+    });
+
+    // Reset escuchados
+    document.getElementById("resetBtn").addEventListener("click", async () => {
+        const res = await fetch("/reset", {method: "POST"});
+        const data = await res.json();
+        document.getElementById("albumDisplay").innerHTML = `<p>${data.message}</p>`;
+
+        albums.forEach(a => a.TimesListened = 0);
+        renderTable(albums);
+    });
+
+    // Búsqueda dinámica (case-insensitive)
+    document.getElementById("searchInput").addEventListener("input", () => {
+        const q = document.getElementById("searchInput").value.toLowerCase().trim();
+        const filtered = albums.filter(a =>
+            a.Name.toLowerCase().includes(q) ||
+            a.Artist.toLowerCase().includes(q) ||
+            a.Genre.toLowerCase().includes(q) ||
+            a.Year.toString().includes(q)
+        );
+        renderTable(filtered);
+    });
+
+    // Inicializar tabla
+    renderTable(albums);
+})();
+</script>
+
 </body>
 </html>
